@@ -141,21 +141,21 @@ KF_T0	equ	0B800h	;11.0592 МГц
 	ORG	000h
 ;-----------------------------------------
 ; Стартовый адрес
-start:	ljmp	prog	;-> запуск программы
+start:	jmp	prog	;-> запуск программы
 ; ========================================
 	ORG	003h
 ; External interrupt 0 ~\_ (тактовая клавиатуры)
 extint0:
 	push	PSW
 	push	ACC
-	ajmp	L_23C	; int /CLK_K
+	jmp	L_23C	; int /CLK_K
 ; ========================================
 	ORG	00Bh
 ; Timer interrupt 0 (Часы реального времени)
 timint0:                ;3
 	push	PSW	;2
 	push	ACC     ;2
-	ajmp	int_rtc ;2
+	jmp	int_rtc ;2
 			;9
 ; ========================================
 	ORG	013h
@@ -165,6 +165,7 @@ extint1:		;2
 	push	ACC	;2
 	push	DPH	;2
 	ajmp	RD_KBD	;2  int /RDKEY
+	;^^^ only AJMP here
 ; ========================================
 	ORG	01Bh
 ; Timer interrupt 1
@@ -175,9 +176,9 @@ timint1:reti
 serint: push	PSW
 	push	ACC
 	mov	PSW,#18h	;PAGE 18
-	ajmp	ser_int
+	jmp	ser_int ;<<< can be removed (handler might be right here)
 ; ========================================
-	ORG	02Ch
+;;;;;;;	ORG	02Ch
 ; Ver 3.1xx
 VERS:	db	3,2		;3.2
  if ft_07
@@ -198,7 +199,7 @@ t_025	equ	115	;Ft=11.0592 Мгц
 ;=============================================
 ; Сброс компьютера
 reset:	clr	SP_RES		;RESET = 0
-	acall	del_10ms	; длительность импульса
+	call	del_10ms	; длительность импульса
 	setb	SP_RES		;RESET = 1
 ; Проверить буфер контрольной строки
 	mov	R0,#t_res	;начало буфера
@@ -207,7 +208,7 @@ reset:	clr	SP_RES		;RESET = 0
 	cjne	@R0,#'T',prog	;
 	inc	R0
 	cjne	@R0,#'M',prog	;
-	ajmp	c0main		; В главный цикл работы
+	jmp	c0main		; В главный цикл работы
 ; Пауза 10 мсек
 del_10ms:
 	mov	R1,#t_10 	;Константа для 10 мсек
@@ -222,7 +223,7 @@ c_del:	mov	R0,#t_025	;Константа для 250 мксек
 prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
 	mov	SP, #b_stek-1	;Указатель стека
 	mov	PSW,#00h
-	acall	del_10ms	;Пауза 10 ms
+	call	del_10ms	;Пауза 10 ms
 	mov	R0,#t_res	;Буфер контр.строки
 	mov	@R0,#'A'
 	inc	R0
@@ -237,7 +238,7 @@ prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
 	mov	TMOD, #21h	;Timer1=mode2  8-бит
 				;Timer0=mode1 16-бит
 ; Set Timer 0 (50 Герц)
-	lcall	set_T0		;
+	call	set_T0		;
 	mov	TCON, #55h	;Timer0,1-On/INT0,1 -Impuls
 ; Init MEM; 00h -> RAM 02h..38h
 	mov	R0, #02h	;от 02h
@@ -249,13 +250,13 @@ c_clr:	mov	@R0, A		; обнулить
 ;-----------------------------------------------
 ; Установка скорости работы RS232
 	mov	R6,#6		;19200 бод
-	acall	set_speed
+	call	set_speed
 ;
 	mov	IP,#01h		; Interrupt Priority
 	mov	IE,#97h		; Interrupt Enable INT0,1,T0,USART
 	mov	P1,#7Fh		; P1.7 -> Разрешить /WAIT (W_ON=0)
 ;/======================================================
-c0main:	acall	clr_buf 	; Clear buf KBD
+c0main:	call	clr_buf 	; Clear buf KBD
 ;/-------------------------------
 ; Main Cikl Wait press key
 c_main:
@@ -272,20 +273,20 @@ c_main:
 no_int:
  endif
 	mov	R6, #0		; Флаг Префикса E0h
-	acall	L_102		; Wait Code KBD
+	call	L_102		; Wait Code KBD
 	cjne	R5, #0E1h, L_66 ; Pause/Break ?
 ; Принят первый скан-код клавиши PAUSE
 ; Press Pause/Break [E1,14,77,E1,F0,14,F0,77]
 	mov	R0, #7-2	; Count Code (-2 кода F0)
 ;//---
-L_5C:	acall	L_102		; Wait Code KBD
+L_5C:	call	L_102		; Wait Code KBD
 	djnz	R0, L_5C	; ждать 5 кодов + 2 префикса
 ;\\---
 ; Переключиться в режим <ПАУЗА> для чего надо
 ; запретить прерывание по /RDKBD (INT1)
 	clr	EX1		; Запретить INT1
 	setb	f_wait		; Flag Wait = 1
-	sjmp	c_main		; Ждать нажатий
+	jmp	c_main		; Ждать нажатий
 ;\---------------------------------------------
 ; Проверить на допустимость скан-кода
 L_66:	clr	C
@@ -300,7 +301,7 @@ L_66:	clr	C
 	mov	DPTR, #0	; P2.0 = 0
 	movx	@DPTR, A	; /VWR=0 (сброс /WAIT)
 	setb	EX1		; Разрешить INT1
-	sjmp	c0main		; Ждать еще нажатия
+	jmp	c0main		; Ждать еще нажатия
 ;\==================================================
 ; Press new key
 L_7D:	mov	A, R5		; =Scan-code AT IBM
@@ -325,7 +326,7 @@ no_unpres:
 	mov	DPTR, #L_527	;Code XT -> Code Spec
 	movc	A, @A+DPTR	; -> Code key
 	mov	R1, A
-	acall	L_134		;code key -> bufer KBD
+	call	L_134		;code key -> bufer KBD
 ;/---- проверить буфер на предмет нажатых клавиш
 	mov	R0, #buf_kbd
 	mov	R1, #8
@@ -364,14 +365,14 @@ L_C9:	mov	A, R5		;
 	inc	A
 	movc	A, @A+DPTR
 	mov	R5, A		;R5=Sym-code 2
-	acall	L_16A		;Decode
+	call	L_16A		;Decode
 	clr	f_decod
 ;
-	ajmp	c_main		;Wait next key
+	jmp	c_main		;Wait next key
 ;\--------------
 ;****************************************************
 ; Процедура приема скан-кода нажатой клавиши ********
-L_100:	acall	clr_buf 	; Clear Buf KBD
+L_100:	call	clr_buf 	; Clear Buf KBD
 ;/-----
 ;	Wait Code KBD
 L_102:	clr	f_unpres	; Flag unpress = 0
@@ -394,7 +395,7 @@ L_10F:	mov	A, R0_10	; R0 page 10
 	mov	R0_10, A	; 00h -> R0 page 10
 	mov	R1_10, A	; 00h -> R1 page 10
 	mov	R6, A		; 00h -> R6
-	sjmp	L_102		; wait new code
+	jmp	L_102		; wait new code
 ;\------
 ; принят скан-код клавиатуры
 L_11E:	mov	R5, A		; Get code KBD
@@ -402,13 +403,13 @@ L_11E:	mov	R5, A		; Get code KBD
 	cjne	A, #0E0h, L_129
 ; Принят префикс 0E0h - запомнить и принять след.
 	mov	R6, #1		; flag prefix key
-	sjmp	L_104		; Get Second code
+	jmp	L_104		; Get Second code
 ;\-------------------------------
 ; NO prefix = 0E0h
 L_129:	cjne	A, #0F0h, L_130
 ; Resive ptefix 0F0h (unpress)
 	setb	f_unpres	; Flag unpress=1
-	sjmp	L_104		;Get second code
+	jmp	L_104		;Get second code
 ;\-------------------------------
 ; No prefix 0E0h & 0F0h
 L_130:	inc	A		;если = 0FFh
@@ -423,14 +424,14 @@ L_134:	mov	A, R1		;
 ; ACC.3 = 1 -> Caps Shift
 	mov	A, #1		;D0
 	mov	R0, #0		;A8
-	acall	L_15D		;Добавить Caps Shift
+	call	L_15D		;Добавить Caps Shift
 ; ACC.3 = 0
 L_13E:	mov	A, R1
 	jnb	ACC.7, L_148	;Флаг Symbol Shift = 0
 ; ACC.7 = 1 -> Symbol Shift
 	mov	A, #2		;D1
 	mov	R0, #7		;A15
-	acall	L_15D		;Добавить Symbol Shift
+	call	L_15D		;Добавить Symbol Shift
 ; ACC.7 = 0
 L_148:	mov	A, R1
 	anl	A, #7		;Номер бита шины данных
@@ -499,7 +500,7 @@ L_17F:	mov	A, R5
 ; Ctrl+Alt
 	cjne	R2, #2Eh, L_16D ;Нажата [./Del]?
 ; + [./Del]
-	ajmp	reset		;Reset COMP
+	jmp	reset		;Reset COMP
 ;-------
 ; no Ctrl+Alt
 L_192:	cjne	R6, #1, L_1A2	;set D7
@@ -549,10 +550,10 @@ L_1C2:	cjne	R6, #1, L_1D4
 ; Left Shift еще не нажат
 	inc	A		;A=1
 L_1CE:	orl	R4_00, A	;R4 bit 0=1
-	sjmp	L_1EC
+	jmp	L_1EC
 ;------
 ;^ d3,d2<>0
-L_1D2:	sjmp	L_203
+L_1D2:	jmp	L_203
 ;--------------------------------
 ;
 L_1D4:	cjne	A, #1, L_1EA
@@ -568,10 +569,10 @@ L_1DC:	mov	R2, #7Ah	;'z' (в XT R2) было R0
 	ret
 ;-------
 ;^ d5,d4<>0
-L_1E4:	sjmp	L_21A		;test 20,30
+L_1E4:	jmp	L_21A		;test 20,30
 ;-------
 ;v non Ctrl+Alt
-L_1E6:	sjmp	L_17F
+L_1E6:	jmp	L_17F
 ;--------------------------------
 ; Нажат Left Shift без Right Shift
 L_1E8:	mov	A, #1
@@ -584,12 +585,12 @@ L_1EC:	mov	A, R3
 ; press Ctrl(d1)+Alt(d2)
 	cjne	R7, #53h, L_219 ;Scan-cod1 DEL =53h
 ; Ctrl+Alt+Del
-	ajmp	reset		;Сброс Speccy
+	jmp	reset		;Сброс Speccy
 ;-----
 L_1FC:	cjne	A, #1, L_1B5
 ; Code ALT = 1
 	mov	A, #4		;bit2 (flag ALT)
-	sjmp	L_1B5
+	jmp	L_1B5
 ;------
 ;^ d3,d2<>0
 L_203:	jb	f_unpres, L_1E6 ;
@@ -614,7 +615,7 @@ L_219:	ret
 ; второй код = 20h/30h
 L_21A:	cjne	A, #20h, L_21F
 ; A=20h
-	sjmp	L_1EC
+	jmp	L_1EC
 L_21F:	cjne	A, #30h, L_219	;ret
 ; A=30h
 ; ========================================
@@ -662,7 +663,7 @@ L_23C:			; int0
 ;-----
 ; Принят стартовый бит данных
 L_257:	mov	R6, #8	;Resive 8 bit
-	sjmp	L_260
+	jmp	L_260
 ; -------------------------
 ; Прием битов данных
 L_25B:	mov	A, R5
@@ -681,17 +682,17 @@ L_266:	mov	A, R5		;Принятый байт
 ;
 	jb	PSW.0, L_260	; PSW.0 - ACCUMULATOR PARITY FLAG
 L_26C:	mov	R5, #0FFh	; результат при ошибке паритета
-	sjmp	L_260
+	jmp	L_260
 ; -------------------------
 L_270:	jnb	PSW.0, L_260	; PSW.0 - ACCUMULATOR PARITY FLAG
-	sjmp	L_26C
+	jmp	L_26C
 ; =============================================
 ; Вход запроса кода Клавиатуры от Spectruma
 ; =============================================
 ;int1:	push	PSW		;2
 ;	push	ACC		;2
 ;	push	DPH		;2
-;	ajmp	RD_KBD		;2
+;	jmp	RD_KBD		;2
 ; Int /RDKBD
 RD_KBD: 			; extint1
 	mov	PSW, #08h	;2  PAGE 01
@@ -712,7 +713,7 @@ RD_KBD: 			; extint1
 	mov	R1_10, A	;1 R1 PAGE 10
 	mov	R7, A		;1 флаг команды=0
 	mov	R1, A		;1 Z код клавиатуры = 0
-	sjmp	ex_kbd		;2
+	jmp	ex_kbd		;2
 ;************************************************
 ; Принят код сканирования не 55h (не команда)
 no_comm:
@@ -879,7 +880,7 @@ L_31B:	mov	R6,A		;Скан-адрес -> R6
 	mov	A, R6		;A15..A8
 	anl	A, #3Fh
 	jnz	ex1cmd		;если не 0 - выполнить
-	ajmp	L_33E		;это NOP
+	jmp	L_33E		;это NOP
 ex1cmd:	mov	R3, A		;R3 - Код команды
 ;*************************************************
 ;********** TEST CODE COMM  **********************
@@ -906,7 +907,7 @@ L_344:	cjne	R3, #02h, no_c02
 	mov	R0, #buf_rd	;
 no_e_brd:
 	mov	adr_rd, R0	;Новый адрес в буфере
-ex_A:	ajmp	L_340		;выход с байтом приема
+ex_A:	jmp	L_340		;выход с байтом приема
 ;--------------------------------
 no_c02_0:
 	cjne	R5,#01h,no_c02_1
@@ -927,10 +928,10 @@ no_rd:	mov	A,cnt_wr	;если = len_bwr
 	cjne	A,#len_bwr,no_wr
 ; буфер передачи заполнен - выход с TD,TE=0
 	mov	A,stat_rs	;текущий статус
-	ajmp	L_340		;выход
+	jmp	L_340		;выход
 no_wr:	mov	A,stat_rs	;текущий статус
 	orl	A,#60h		;TD,TE=1
-	ajmp	L_340		;выход
+	jmp	L_340		;выход
 ;--------------------------------
 no_c02_1:
 	cjne	R5,#2,no_c02_2
@@ -957,12 +958,12 @@ no_dcd: jb	ACC.2,no_ri	;/RI ?
 ; RI=1	(сигнал инверсный)
 	setb	stat_md.6	;RI=1
 no_ri:	mov	A,stat_md	;текущий статус модема
-	ajmp	L_340		;выход
+	jmp	L_340		;выход
 ;--------------------------------
 no_c02_2:
 ; COMM = 0C2h - чтение счетчика буфера приема
 	mov	A, cnt_rd	;
-	ajmp	L_340		;выход
+	jmp	L_340		;выход
 ; Конец работы команды xx02h - Чтение регистров RS232
 ;=============================================
 no_c02: cjne	R3, #3, no_c03
@@ -971,7 +972,7 @@ no_c02: cjne	R3, #3, no_c03
 ; установить признак приема следующего байта
 	inc	R7		;Принять еще один байт
 	mov	A,#0FFh
-	ajmp	L_2F3		;пока выйти
+	jmp	L_2F3		;пока выйти
 ;=============================================
 no_1c03:
 ; принят байт (R6) для записи в регистр RS232
@@ -995,7 +996,7 @@ no_inc:
 	mov	R0,#buf_wr	;в начало буфера
 no_ebwr:
 	mov	adr_ws,R0	;новый адрес
-ex_cmd: ajmp	L_33E		;выйти
+ex_cmd: jmp	L_33E		;выйти
 ;
 clr_bwr:
 	mov	SBUF,R6 	;сразу передать
@@ -1004,7 +1005,7 @@ clr_bwr:
 	mov	A,#buf_wr
 	mov	adr_wr,A
 	mov	adr_ws,A
-	ajmp	L_33E		;выход
+	jmp	L_33E		;выход
 ;---------------------------------------------
 no_c03_0:
 	cjne	R5,#01h,no_c03_1
@@ -1029,18 +1030,18 @@ no_c03_0:
 	anl	A,#18h		;RTS(4),DTR(3)
 	orl	A,#67h		;W_ON(7)=0
 	mov	P1,A		;Установить биты
-	ajmp	L_33E		;выход
+	jmp	L_33E		;выход
 ;--------------------------------------
 no_c03_1:
 	cjne	R5,#02h,no_c03_2
 ; COMM 83h,<data> - записать байт управления модемом
 	mov	stat_rs,R6	;
-	ajmp	L_33E		;
+	jmp	L_33E		;
 ;--------------------------------------
 no_c03_2:
 ; COMM 0C3h,<data> - записать скорость RS232
-	lcall	set_speed	;R6 -> скорость
-	ajmp	L_33E		;выход
+	call	set_speed	;R6 -> скорость
+	jmp	L_33E		;выход
 ;***** Конец выполнения команд xx03h  *************
 ;**************************************************
 no_c03: cjne	R3, #1, L_34E	;Код команды # 01h ?
@@ -1050,7 +1051,7 @@ no_c03: cjne	R3, #1, L_34E	;Код команды # 01h ?
 	mov	A, R5		;0..3 (Adress Param)
 	movc	A, @A+DPTR	;
 	pop	DPL
-	sjmp	L_340		;
+	jmp	L_340		;
 ;=================================================
 L_34E:	cjne	R3, #7, L_35C
 ; COMM = 07h (Очистка буфера клавиатуры)
@@ -1060,7 +1061,7 @@ L_355:	mov	@R0, #0FFh	;все <1>
 	inc	R0
 	djnz	R1, L_355
 ;-----
-	sjmp	L_33E
+	jmp	L_33E
 ;=================================================
 L_35C:	cjne	R3, #8, L_376
 ; COMM = 08h,<mode> (Установка режима работы контроллера)
@@ -1092,50 +1093,50 @@ L_376:	cjne	R3, #9, L_37F
 	inc	A		;1..4
 	mov	R0, A
 	mov	A, @R0		;A=(R1)..(R4)
-	sjmp	L_340
+	jmp	L_340
 ;=================================================
 L_37F:	cjne	R3, #0Ah, L_387
 ; COMM=0Ah Set RUS
 	orl	R3_00, #80h	; Set RUS (было R1_00)
-	sjmp	L_33E		;выход с A=0FFh
+	jmp	L_33E		;выход с A=0FFh
 ;=================================================
 L_387:	cjne	R3, #0Bh, L_38F
 ; COMM=0Bh Set LAT
 	anl	R3_00, #7Fh	; Set LAT (было R1_00)
-	sjmp	L_33E		;выход с A=0FFh
+	jmp	L_33E		;выход с A=0FFh
 ;=================================================
 L_38F:	cjne	R3, #0Ch, L_396
 ; COMM=0Ch  Установить режим ожидания
 	setb	f_wait		; Set Wait ON
-	sjmp	L_33E		;выход с A=0FFh
+	jmp	L_33E		;выход с A=0FFh
 ;=================================================
 L_396:	cjne	R3, #0Dh, L_39B
 ; COMM=0Dh   Программный сброс компьютера
-	ajmp	reset		; Reset Computer
+	jmp	reset		; Reset Computer
 ;=================================================
 L_39B:	cjne	R3, #10h, L_3A4
 ; COMM=10h..0D0h (запрос текущего времени)
 	mov	A, #b_time	;секунды
-	acall	L_3E7		; Get Time
-	ajmp	L_2F3		;
+	call	L_3E7		; Get Time
+	jmp	L_2F3		;
 ;=================================================
 L_3A4:	cjne	R3, #11h, L_3AD
 ; COMM=11h..0D1h (установка текущего времени)
 	mov	A, #b_time
-	acall	L_3ED		; Set Time
-	ajmp	L_2F3
+	call	L_3ED		; Set Time
+	jmp	L_2F3
 ;=================================================
 L_3AD:	cjne	R3, #12h, L_3B6
 ; COMM=12h..0D2h (запрос текущей даты)
 	mov	A, #b_date	; Буфер даты
-	acall	L_3E7		; Get DATA
-	ajmp	L_2F3
+	call	L_3E7		; Get DATA
+	jmp	L_2F3
 ;=================================================
 L_3B6:	cjne	R3, #13h, L_3BF
 ; COMM=13h..0D3h (установка текущей даты)
 	mov	A, #b_date	; Буфер даты
-	acall	L_3ED		; Set DATA
-	ajmp	L_2F3
+	call	L_3ED		; Set DATA
+	jmp	L_2F3
 ;=================================================
 L_3BF:	cjne	R3, #14h, L_3CD ;
 ; COMM=14h,<data> (установка битов порта P1)
@@ -1143,12 +1144,12 @@ L_3BF:	cjne	R3, #14h, L_3CD ;
 ; R7=1
 L_3C5:	inc	R7		; R7=2
 	mov	A,#0FFh
-	ajmp	L_2F3
+	jmp	L_2F3
 ; ---
 ; R7=2
 L_3C8:	mov	A, R6		;<data>
 	orl	P1, A		;
-	ajmp	L_33E		;Выход с A=0FFh
+	jmp	L_33E		;Выход с A=0FFh
 ;=================================================
 L_3CD:	cjne	R3, #15h, L_3D9
 ; COMM=15h,<data> (сброс битов порта P1)
@@ -1157,17 +1158,17 @@ L_3CD:	cjne	R3, #15h, L_3D9
 	mov	A, R6		;<data>
 	cpl	A
 	anl	P1, A
-L_3D7:	ajmp	L_33E		;выход с A=0FFh
+L_3D7:	jmp	L_33E		;выход с A=0FFh
 ;=================================================
 L_3D9:	cjne	R3, #16h, L_3E0
 ; COMM=16h (чтение порта P3)
 	mov	A, P3		;
-	ajmp	L_340		;выход с A=P3
+	jmp	L_340		;выход с A=P3
 ;=================================================
 L_3E0:	cjne	R3, #17h, L_3D7 ;выход с A=0FFh
 ; COMM=17h (чтение порта P1)
 	mov	A, P1		;
-	ajmp	L_340		;выход с A=P1
+	jmp	L_340		;выход с A=P1
 ; End Decode Command
 ;*************************************************
 ; Get data
@@ -1203,22 +1204,22 @@ set_speed:
 	cjne	A,#6,no_spd_6
 ; 19200 бод
 	mov	A,#4
-	sjmp	set_spd 	;установить №4
+	jmp	set_spd 	;установить №4
 no_spd_6:
 	cjne	A,#12,no_spd_12
 ; 9600 бод
 	mov	A,#5
-	sjmp	set_spd 	;установить №5
+	jmp	set_spd 	;установить №5
 no_spd_12:
 	cjne	A,#24,no_spd_24
 ; 4800 бод
 	mov	A,#6
-	sjmp	set_spd 	;установить №6
+	jmp	set_spd 	;установить №6
 no_spd_24:
 	cjne	A,#48,no_spd_48
 ; 2400 бод
 	mov	A,#7
-	sjmp	set_spd 	;установить №7
+	jmp	set_spd 	;установить №7
 no_spd_48:
 	cjne	A,#96,no_set_spd
 ; 1200 бод
@@ -1252,7 +1253,7 @@ no_set_spd:
 ;	push	PSW
 ;	push	ACC
 ;	mov	PSW, #18h	;PAGE 18
-;	ajmp	ser_int
+;	jmp	ser_int
 ser_int:
 	jbc	RI,ser_rx	;готовность приемника
 ; готовность передатчика RS232
@@ -1275,7 +1276,7 @@ ser_int:
 no_ewr:
 	mov	adr_wr,R0	;новый адрес в буфере
 	setb	EA		;разрешить прерывания
-	sjmp	no2end_buf	;выход
+	jmp	no2end_buf	;выход
 ;------------------------------------------
 ; принят байт по RS232
 ser_rx:
@@ -1369,13 +1370,13 @@ L_445:	clr	C
 ;
 	mov	@R0, #0
 ;
-L_45A:	lcall	set_T0		;T0 = 50 герц
+L_45A:	call	set_T0		;T0 = 50 герц
 	pop	ACC
 	pop	PSW
 	reti
 ; -------------------------
 ;
-	ORG	600h
+;;;;;;;	ORG	600h
 ;----------------------------------------
 ; Число дней в месяцах
 L_465:	db  31	;Январь
@@ -1947,13 +1948,13 @@ at2xt:	db    0 ;00h
 	db    0 ;82h
 	db  41h ;83h  118    F7
 ;===================================================
-	org	7B0h
+;;;;;;;	org	7B0h
 ; Установка параметров Таймера 0 (50 герц)
 set_T0: mov	TH0,#KF_T0/256 ;HIGH KF_T0 ; Timer0 - High Byte
 	mov	TL0,#KF_T0&255 ;LOW  KF_T0 ; Timer0 - Low Byte
 	ret
 ;===================================================
-	org	7B8h
+;;;;;;;	org	7B8h
 ; таблица настройки скорости RS232
 ; N = (Fosc/192)/Baud  SMOD=1
 ; N = (Fosc/384)/Baud  SMOD=0
@@ -1983,7 +1984,7 @@ tab_spd:
 	db	24-1	;8(98)	1200   SMOD=0
  endif
 ;----------------------------------------------
-	org	7C0h
+;;;;;;;	org	7C0h
 aCopyrightC1995:
 	db 0Dh,0Ah
 	db "Copyright (C) 1995 Honey Soft",0Dh,0Ah
@@ -1995,7 +1996,7 @@ aCopyrightC1995:
 	db	"11"
  endif
 	db	0Dh,0Ah,0
-	db 0FFh
+;;;;;;;	db 0FFh
 ; =================================================
 ;
 	end
