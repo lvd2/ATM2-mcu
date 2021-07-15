@@ -1,5 +1,5 @@
-TARGET = at32.hex
-BIN = at32.bin
+TARGET = ../bin/at32.hex
+BIN = ../bin/at32.bin
 
 
 .PHONY: clean
@@ -26,3 +26,4 @@ $(BIN): at32.p
 
 clean:
 	rm *.p *.lst $(TARGET) $(BIN)
+

@@ -4,7 +4,9 @@
 ; и блокировкой /WAIT сигналом /KEYRD		*
 ; 15/11/2019 - увеличена глубина стека до 16байт*
 ;************************************************
-$mod52
+		cpu	8052
+		relaxed	on
+		include	"SFRs.asm"
 ;================================================
 ; Длительность сигнала /WR на выводе контроллера
 ; по команде movx равна 6 тактам генератора.
@@ -35,25 +37,25 @@ ft_11	equ	1	;11.0592 Мгц
 ;-------------------------------------------
 ; ПОРТЫ
 ; порт P1(A)
-RS_CD	equ	P1.0	; PA0 - CD     input
-RS_CTS	equ	P1.1	; PA1 - CTS    input
-RS_RI	equ	P1.2	; PA2 - RI     input
-RS_DTR	equ	P1.3	; PA3 - DTR    out
-RS_RTS	equ	P1.4	; PA4 - RTS    out
-SP_INT	equ	P1.5	; PA5 - INT_T  out
-SP_RES	equ	P1.6	; PA6 - /RES  -out
-SP_WT	equ	P1.7	; PA7 - W_ON  -out
+RS_CD	bit	P1.0	; PA0 - CD     input
+RS_CTS	bit	P1.1	; PA1 - CTS    input
+RS_RI	bit	P1.2	; PA2 - RI     input
+RS_DTR	bit	P1.3	; PA3 - DTR    out
+RS_RTS	bit	P1.4	; PA4 - RTS    out
+SP_INT	bit	P1.5	; PA5 - INT_T  out
+SP_RES	bit	P1.6	; PA6 - /RES  -out
+SP_WT	bit	P1.7	; PA7 - W_ON  -out
 ; порт P3
-RS_RX	equ	P3.0	; P30 - RX     input
-RS_TX	equ	P3.1	; P31 - TX    -output
-KB_CLK	equ	P3.2	; P32 - CLK_K  input	INT0
-SP_KBD	equ	P3.3	; P33 - /KEYRD inpit	INT1
-SP_VE1	equ	P3.4	; P34 - VE1    input
-KB_DAT	equ	P3.5	; P35 - DATA_K input
-VWR	equ	P3.6	; P36 - /VWR  -output
-VRD	equ	P3.7	; P37 - /VRD  -output
+RS_RX	bit	P3.0	; P30 - RX     input
+RS_TX	bit	P3.1	; P31 - TX    -output
+KB_CLK	bit	P3.2	; P32 - CLK_K  input	INT0
+SP_KBD	bit	P3.3	; P33 - /KEYRD inpit	INT1
+SP_VE1	bit	P3.4	; P34 - VE1    input
+KB_DAT	bit	P3.5	; P35 - DATA_K input
+VWR	bit	P3.6	; P36 - /VWR  -output
+VRD	bit	P3.7	; P37 - /VRD  -output
 ;-----------------------------------------
-	dseg
+	segment	data
 	org	00h
 ; PAGE 00 - главная страница
 R0_00:  ds 1 		;R0
@@ -89,15 +91,15 @@ b_sadr: ds 1		;буфер скан-адреса
 mode:	ds 1		;режим контроллера
 ;--------------------------------
 flags:		ds 1
-f_wait	  equ	flags.0	;флаг ПАУЗА
-f_unpres  equ	flags.1	;флаг отжатия клавиши
-f_pref	  equ	flags.2	;флаг префикса E0h
-f_press   equ	flags.3	;
-f_decod   equ	flags.5 ;
+f_wait	  bit	flags.0	;флаг ПАУЗА
+f_unpres  bit	flags.1	;флаг отжатия клавиши
+f_pref	  bit	flags.2	;флаг префикса E0h
+f_press   bit	flags.3	;
+f_decod   bit	flags.5 ;
 ;
 stat_md:	ds 1	;текущий статус модема
 stat_rs:	ds 1	;текущий статус RS232
-f_int	  equ	stat_rs.7
+f_int	  bit	stat_rs.7
 ;--------------------------------
 adr_wr: ds 1		;текущий адрес в буфере передатчика
 adr_ws: ds 1		;текущий адрес для записи в буф.
@@ -110,7 +112,7 @@ buf_wr: 	ds len_bwr	;буфер передачи
 len_brd equ	54-8		;Длина буфера приема
 len_ird	equ	50-8		;длина буфера для INT (если разрешен)
 buf_rd: 	ds len_brd	;буфер приема
-		ds 0
+		;ds 0
 ;--------------------------------
 	org	128-16-16
 ; Bufer KBD
@@ -135,7 +137,7 @@ KF_T0	equ	0B800h	;11.0592 МГц
 ;*****************************************
 ;**	НАЧАЛО КОДОВОГО СЕГМЕНТА	**
 ;*****************************************
-CSEG
+	segment	code
 	ORG	000h
 ;-----------------------------------------
 ; Стартовый адрес
@@ -235,7 +237,7 @@ prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
 	mov	TMOD, #21h	;Timer1=mode2  8-бит
 				;Timer0=mode1 16-бит
 ; Set Timer 0 (50 Герц)
-	call	set_T0		;
+	lcall	set_T0		;
 	mov	TCON, #55h	;Timer0,1-On/INT0,1 -Impuls
 ; Init MEM; 00h -> RAM 02h..38h
 	mov	R0, #02h	;от 02h
@@ -252,8 +254,8 @@ c_clr:	mov	@R0, A		; обнулить
 	mov	IP,#01h		; Interrupt Priority
 	mov	IE,#97h		; Interrupt Enable INT0,1,T0,USART
 	mov	P1,#7Fh		; P1.7 -> Разрешить /WAIT (W_ON=0)
-;/======================================================\
-c0main: acall	clr_buf 	; Clear buf KBD
+;/======================================================
+c0main:	acall	clr_buf 	; Clear buf KBD
 ;/-------------------------------
 ; Main Cikl Wait press key
 c_main:
@@ -1037,7 +1039,7 @@ no_c03_1:
 ;--------------------------------------
 no_c03_2:
 ; COMM 0C3h,<data> - записать скорость RS232
-	call	set_speed	;R6 -> скорость
+	lcall	set_speed	;R6 -> скорость
 	ajmp	L_33E		;выход
 ;***** Конец выполнения команд xx03h  *************
 ;**************************************************
@@ -1367,7 +1369,7 @@ L_445:	clr	C
 ;
 	mov	@R0, #0
 ;
-L_45A:	call	set_T0		;T0 = 50 герц
+L_45A:	lcall	set_T0		;T0 = 50 герц
 	pop	ACC
 	pop	PSW
 	reti
@@ -1516,7 +1518,7 @@ L_471:	db  1Bh ; ESC
 	db    0 ; Left Shift
 	db    3 ; bit0 R3
 ;
-	db  5Ch ; \
+	db  5Ch ; backslash
 	db    0 ;
 ;
 	db  5Ah ; Z
@@ -1947,8 +1949,8 @@ at2xt:	db    0 ;00h
 ;===================================================
 	org	7B0h
 ; Установка параметров Таймера 0 (50 герц)
-set_T0: mov	TH0,#HIGH KF_T0 ; Timer0 - High Byte
-	mov	TL0,#LOW  KF_T0 ; Timer0 - Low Byte
+set_T0: mov	TH0,#KF_T0/256 ;HIGH KF_T0 ; Timer0 - High Byte
+	mov	TL0,#KF_T0&255 ;LOW  KF_T0 ; Timer0 - Low Byte
 	ret
 ;===================================================
 	org	7B8h
@@ -1984,13 +1986,13 @@ tab_spd:
 	org	7C0h
 aCopyrightC1995:
 	db 0Dh,0Ah
-	db 'Copyright (C) 1995 Honey Soft',0Dh,0Ah
-	db '  AT Keyboard Driver V3.2'
+	db "Copyright (C) 1995 Honey Soft",0Dh,0Ah
+	db "  AT Keyboard Driver V3.2"
  if ft_07
-	db	'07'
+	db	"07"
  endif
  if ft_11
-	db	'11'
+	db	"11"
  endif
 	db	0Dh,0Ah,0
 	db 0FFh
