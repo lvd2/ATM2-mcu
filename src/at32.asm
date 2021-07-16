@@ -1184,7 +1184,9 @@ L_3F9:	mov	A, #0FFh
 ;  1 -- 115200
 ;  2 --  57600
 ;  3 --  38400
+;  4 --  28800
 ;  6 --  19200
+;  8 --  14400
 ; 12 --   9600
 ; 24 --   4800
 ; 48 --   2400
@@ -1198,12 +1200,15 @@ set_speed:
 	mov	A,R6		;
 	jz	.clr_bufs	;0 - нельзя
 
-	add	a,#-4
-	jnc	.set_spd	;1,2,3
+	add	a,#-5
+	jnc	.set_spd	;1,2,3,4
 
 	cjne	r6,#6,.no6
 	jmp	.set_spd
 .no6
+	cjne	r6,#8,.no8
+	jmp	.set_spd
+.no8
 	cjne	r6,#12,.no12
 	jmp	.set_spd
 .no12
