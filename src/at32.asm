@@ -171,8 +171,8 @@ serint: push	PSW
 	jmp	ser_int ;<<< can be removed (handler might be right here)
 ; ========================================
 ;;;;;;;	ORG	02Ch
-; Ver 3.1xx
-VERS:	db	3,2		;3.2
+; Ver 4.0xx
+VERS:	db	4,0		;3.2
 	db	1,1	;Тактовая Частота в МГц
 ;**********************************************
 t_10	equ	10*4	;10 мсек (40*0.25 мсек)
@@ -1032,8 +1032,8 @@ no_c03_2:
 ;**************************************************
 no_c03: cjne	R3, #1, L_34E	;Код команды # 01h ?
 ; COMM = 01h|41h|81h|0C1h Get Vers.
-	push	DPL
-	mov	DPTR, #vers	;Buf Ver.
+	push	DPL ; TODO: DPH????
+	mov	DPTR, #VERS	;Buf Ver.
 	mov	A, R5		;0..3 (Adress Param)
 	movc	A, @A+DPTR	;
 	pop	DPL
@@ -1963,12 +1963,12 @@ set_T0: mov	TH0,#KF_T0/256 ;HIGH KF_T0 ; Timer0 - High Byte
 ;===================================================
 ;----------------------------------------------
 ;;;;;;;	org	7C0h
-aCopyrightC1995:
-	db 0Dh,0Ah
-	db "Copyright (C) 1995 Honey Soft",0Dh,0Ah
-	db "  AT Keyboard Driver V3.2"
-	db	"11"
-	db	0Dh,0Ah,0
+aCopyright:
+	db "(c) 1995 Honey Soft, "
+	db "(c) 2019 Caro, "
+	db "(c) 2021 lvd. "
+	db "AT/PS2 kbd + RS232 ATM2 controller"
+	db 0
 ;;;;;;;	db 0FFh
 ; =================================================
 ;
