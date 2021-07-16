@@ -18,9 +18,6 @@ en_movx	equ	1	;1 - разрешена movx
 			;0 - прямое управление
 ; разрешение работы с прерыванием
 en_int	equ	0	;0 - не разрешен
-; Флаги тактовой частоты микроконтроллера
-ft_07	equ	0	;7 Мгц
-ft_11	equ	1	;11.0592 Мгц
 ;------------------------------------------
 ; R1 - предыдущий code key
 ; R2 - текущий code key
@@ -128,12 +125,7 @@ f_tic	equ	50	;Частота тиков Ч.Р.В  (Гц)
 ;f_proc	equ	7000	;Частота тактирования (КГц)
 ; Коэфф.деления таймера 0 равен
 ;KF_T0	equ	-f_proc*1000/12/f_tic
- if ft_07
-KF_T0	equ	0D26Eh	; 7.0000 Мгц
- endif
- if ft_11
 KF_T0	equ	0B800h	;11.0592 МГц
- endif
 ;*****************************************
 ;**	НАЧАЛО КОДОВОГО СЕГМЕНТА	**
 ;*****************************************
@@ -181,21 +173,11 @@ serint: push	PSW
 ;;;;;;;	ORG	02Ch
 ; Ver 3.1xx
 VERS:	db	3,2		;3.2
- if ft_07
-	db	0,7	;Тактовая Частота в МГц
- endif
- if ft_11
 	db	1,1	;Тактовая Частота в МГц
- endif
 ;**********************************************
 t_10	equ	10*4	;10 мсек (40*0.25 мсек)
 ; Константа для 250 мксек зависит от такт. частоты
- if ft_07
-t_025	equ	73	;Ft=7 Мгц
- endif
- if ft_11
 t_025	equ	115	;Ft=11.0592 Мгц	
- endif
 ;=============================================
 ; Сброс компьютера
 reset:	clr	SP_RES		;RESET = 0
@@ -239,7 +221,11 @@ prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
 				;Timer0=mode1 16-бит
 ; Set Timer 0 (50 Герц)
 	call	set_T0		;
-	mov	TCON, #55h	;Timer0,1-On/INT0,1 -Impuls
+;;;;;;;	mov	TCON, #55h	;Timer0,1-On/INT0,1 -Impuls
+	mov	TCON, #15h	;Timer0-On/INT0,1 -Impulse
+
+	mov	T2CON,#$34	;tmr2 for baud rate generation
+
 ; Init MEM; 00h -> RAM 02h..38h
 	mov	R0, #02h	;от 02h
 	mov	R1, #36h	; до 38h
@@ -1189,53 +1175,63 @@ L_3ED:	cjne	R7, #2, L_3F9
 L_3F9:	mov	A, #0FFh
 	inc	R7		; R7=2
 	ret
+
+
+
 ;*********************************************
 ;------ Настройка RS-232 (по таблице констант)
 ; R6 - коэффициент деления 1,2,3,6,12,24,48
+;  1 -- 115200
+;  2 --  57600
+;  3 --  38400
+;  6 --  19200
+; 12 --   9600
+; 24 --   4800
+; 48 --   2400
+; 96 --   1200
 set_speed:
+
+	;11059200 Hz only!
+
+
+	;filter only allowed values in R6
 	mov	A,R6		;
-	jz	no_set_spd	;0 - нельзя
-;
-	clr	C
-	subb	A,#4		;1,2,3 -> CY=1
-	mov	A,R6
-	jc	set_spd 	;установить №1,№2,№3
-; R6>3
-	cjne	A,#6,no_spd_6
-; 19200 бод
-	mov	A,#4
-	jmp	set_spd 	;установить №4
-no_spd_6:
-	cjne	A,#12,no_spd_12
-; 9600 бод
-	mov	A,#5
-	jmp	set_spd 	;установить №5
-no_spd_12:
-	cjne	A,#24,no_spd_24
-; 4800 бод
-	mov	A,#6
-	jmp	set_spd 	;установить №6
-no_spd_24:
-	cjne	A,#48,no_spd_48
-; 2400 бод
-	mov	A,#7
-	jmp	set_spd 	;установить №7
-no_spd_48:
-	cjne	A,#96,no_set_spd
-; 1200 бод
-	mov	A,#8		;Установить №8
-set_spd:
-	push	DPL
-	mov	DPTR,#tab_spd-1
-	movc	A,@A+DPTR	;Код делителя
-	mov	PCON,#80h	;SMOD=1 Удвоенная скорость
-	jbc	ACC.7,yes_smod	;
-	mov	PCON,#00h	;SMOD=0 Одинарная скорость
-yes_smod:
-	cpl	A
-	mov	TH1,A		; Новая скорость
-	pop	DPL
-no_set_spd:
+	jz	.clr_bufs	;0 - нельзя
+
+	add	a,#-4
+	jnc	.set_spd	;1,2,3
+
+	cjne	r6,#6,.no6
+	jmp	.set_spd
+.no6
+	cjne	r6,#12,.no12
+	jmp	.set_spd
+.no12
+	cjne	r6,#24,.no24
+	jmp	.set_spd
+.no24
+	cjne	r6,#48,.no48
+	jmp	.set_spd
+.no48
+	cjne	r6,#96,.clr_bufs
+
+.set_spd
+	mov	a,r6
+	mov	B,#3	;baudrate = 11059200/32/(65536-RCAP). for 115200 65536-RCAP must be 3
+	mul	ab
+	;negate result
+	dec	a
+	cpl	a
+	mov	RCAP2L,a
+
+	; RCAP2L is always non-zero for permitted baudrates
+;	jnz	.nodec
+;	dec	B
+;.nodec
+	xrl	B,#$FF
+	mov	RCAP2H,B
+
+.clr_bufs
 	mov	A,#buf_wr	;буфер передатчика
 	mov	adr_wr,A	;
 	mov	adr_ws,A
@@ -1246,6 +1242,12 @@ no_set_spd:
 	mov	cnt_rd,A	;счетчик чтения
 	mov	cnt_wr,A	;счетчик записи
 	ret
+
+
+
+
+
+
 ;****************************************
 ; Прием по Rs232			*
 ;****************************************
@@ -1954,47 +1956,13 @@ set_T0: mov	TH0,#KF_T0/256 ;HIGH KF_T0 ; Timer0 - High Byte
 	mov	TL0,#KF_T0&255 ;LOW  KF_T0 ; Timer0 - Low Byte
 	ret
 ;===================================================
-;;;;;;;	org	7B8h
-; таблица настройки скорости RS232
-; N = (Fosc/192)/Baud  SMOD=1
-; N = (Fosc/384)/Baud  SMOD=0
-tab_spd:
- if ft_07
-; Под кварц 7 Мгц (с ошибкой назначения скорости)
-;		N
-	db	1-1+80h ;1	36458(115200) SMOD=1
-	db	1-1+80h ;2	36458(57600)  SMOD=1
-	db	1-1+80h	;3	36458(38400)  SMOD=1
-	db	1-1	;4(6)	18229(19200)  SMOD=0
-	db	4-1+80h	;5(12)	9114(9600)   SMOD=1
-	db	4-1	;6(24)	4557(4800)   SMOD=0
-	db	15-1+80h;7(48)	2430(2400)   SMOD=1
-	db	15-1	;8(98)	1215(1200)   SMOD=0
- endif
- if ft_11
-; Под кварц 11.0592 (точная установка скорости)
-;		N
-	db	1-1+80h ;1      57600(115200) SMOD=1
-	db	1-1+80h ;2	57600  SMOD=1
-	db	1-1	;3	28800  SMOD=0
-	db	3-1+80h ;4(6)	19200  SMOD=1
-	db	3-1	;5(12)	9600   SMOD=0
-	db	6-1	;6(24)	4800   SMOD=0
-	db	12-1	;7(48)	2400   SMOD=0
-	db	24-1	;8(98)	1200   SMOD=0
- endif
 ;----------------------------------------------
 ;;;;;;;	org	7C0h
 aCopyrightC1995:
 	db 0Dh,0Ah
 	db "Copyright (C) 1995 Honey Soft",0Dh,0Ah
 	db "  AT Keyboard Driver V3.2"
- if ft_07
-	db	"07"
- endif
- if ft_11
 	db	"11"
- endif
 	db	0Dh,0Ah,0
 ;;;;;;;	db 0FFh
 ; =================================================
