@@ -52,6 +52,22 @@ KB_DAT	bit	P3.5	; P35 - DATA_K input
 VWR	bit	P3.6	; P36 - /VWR  -output
 VRD	bit	P3.7	; P37 - /VRD  -output
 ;-----------------------------------------
+
+
+len_bwr equ	64		;tx buf len -- DO NOT CHANGE!!!
+len_brd equ	64		;Длина буфера приема -- DO NOT CHANGE!!!
+len_ird	equ	len_brd-4	;длина буфера для INT (если разрешен)
+
+
+;*************************************************
+; Часы реального времени
+f_tic	equ	50	;Частота тиков Ч.Р.В  (Гц)
+;f_proc	equ	7000	;Частота тактирования (КГц)
+; Коэфф.деления таймера 0 равен
+;KF_T0	equ	-f_proc*1000/12/f_tic
+KF_T0	equ	0B800h	;11.0592 МГц
+
+
 	segment	data
 	org	00h
 ; PAGE 00 - главная страница
@@ -110,22 +126,19 @@ adr_ws: ds 1		;текущий адрес для записи в буф.
 ;
 t_res:	ds 3		;адрес контрольной строки
 ;
-len_bwr equ	64		;DO NOT CHANGE!!!
-;;;;;;;buf_wr: 	ds len_bwr	;буфер передачи
-;
-len_brd equ	64		;Длина буфера приема -- DO NOT CHANGE!!!
-len_ird	equ	len_brd-4	;длина буфера для INT (если разрешен)
-;;;;;;;buf_rd: 	ds len_brd	;буфер приема
-		;ds 0
 ;--------------------------------
-	org	128-16-16
-; Bufer KBD
-buf_kbd:	ds 8		;Буфер клавиатуры
 ; Буфер часов
 tics:		ds 1		;50 тиков в секунду
 b_time: 	ds 3		;секунды,минуты,часы
 b_date: 	ds 4		;день,месяц,год,столетие
-b_stek: 	ds 16		;стек -> вверх
+
+
+
+
+	org	$60 ;128-16-16
+; Bufer KBD
+buf_kbd:	ds 8		;Буфер клавиатуры -- DO NOT CHANGE ADDRESS!
+b_stek: 	ds 24		;стек -> вверх
 
 ;RX/TX buffers in extra 8052 memory
 	org	$80
@@ -133,13 +146,6 @@ buf_wr	ds	len_bwr	;occupies $80..$BF -- code relies on it -- DO NOT CHANGE!!!
 buf_rd	ds	len_brd ;occupies $C0..$FF -- code relies on it -- DO NOT CHANGE!!!
 
 
-;*************************************************
-; Часы реального времени
-f_tic	equ	50	;Частота тиков Ч.Р.В  (Гц)
-;f_proc	equ	7000	;Частота тактирования (КГц)
-; Коэфф.деления таймера 0 равен
-;KF_T0	equ	-f_proc*1000/12/f_tic
-KF_T0	equ	0B800h	;11.0592 МГц
 ;*****************************************
 ;**	НАЧАЛО КОДОВОГО СЕГМЕНТА	**
 ;*****************************************
