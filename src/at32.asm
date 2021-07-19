@@ -65,7 +65,14 @@ R6_00:  ds 1 		;R6 флаг префикса
 R7_00:  ds 1 		;R7
 ;---------------------------
 ; PAGE 08 - страница /RDKBD
-	ds 8		;R0..R7
+R0_08:  ds 1
+R1_08:  ds 1
+R2_08:  ds 1
+R3_08:  ds 1
+R4_08:  ds 1
+R5_08:  ds 1
+R6_08:  ds 1
+R7_08:  ds 1
 ;---------------------------
 ; PAGE 10 - страница /CLK_K
 R0_10:	ds 1 		;R0
@@ -103,10 +110,10 @@ adr_ws: ds 1		;текущий адрес для записи в буф.
 ;
 t_res:	ds 3		;адрес контрольной строки
 ;
-len_bwr equ	64
+len_bwr equ	64		;DO NOT CHANGE!!!
 ;;;;;;;buf_wr: 	ds len_bwr	;буфер передачи
 ;
-len_brd equ	64		;Длина буфера приема
+len_brd equ	64		;Длина буфера приема -- DO NOT CHANGE!!!
 len_ird	equ	len_brd-4	;длина буфера для INT (если разрешен)
 ;;;;;;;buf_rd: 	ds len_brd	;буфер приема
 		;ds 0
@@ -122,8 +129,8 @@ b_stek: 	ds 16		;стек -> вверх
 
 ;RX/TX buffers in extra 8052 memory
 	org	$80
-buf_wr	ds	len_bwr
-buf_rd	ds	len_brd
+buf_wr	ds	len_bwr	;occupies $80..$BF -- code relies on it -- DO NOT CHANGE!!!
+buf_rd	ds	len_brd ;occupies $C0..$FF -- code relies on it -- DO NOT CHANGE!!!
 
 
 ;*************************************************
@@ -894,12 +901,15 @@ L_344:	cjne	R3, #02h, no_c02
 	mov	cnt_rd, A	;счетчик - 1
 	mov	R0, adr_rd	;текущий адрес приема
 	mov	A,@R0		;байт из буфера
-	inc	R0
-	cjne	R0, #(buf_rd+len_brd)&255, no_e_brd
+;;;;;;;	inc	R0
+;;;;;;;	cjne	R0, #(buf_rd+len_brd)&255, no_e_brd
 ; дошли до конца буфера приема, вернутся в начало
-	mov	R0, #buf_rd	;
-no_e_brd:
-	mov	adr_rd, R0	;Новый адрес в буфере
+;;;;;;;	mov	R0, #buf_rd	;
+;;;;;;;no_e_brd:
+;;;;;;;	mov	adr_rd, R0	;Новый адрес в буфере
+	inc	adr_rd
+	orl	adr_rd,#$C0	;C0..FF wrap
+
 ex_A:	jmp	L_340		;выход с байтом приема
 ;--------------------------------
 no_c02_0:
@@ -982,13 +992,16 @@ no_1c03:
 no_inc:
 ; записать текущий байт в буфер передатчика
 	mov	R0,adr_ws	;текущий адрес записи
-	mov	A,R6		;<data>
-	mov	@R0,A		;-> в буфер
-	inc	R0
-	cjne	R0,#buf_wr+len_bwr,no_ebwr
-	mov	R0,#buf_wr	;в начало буфера
-no_ebwr:
-	mov	adr_ws,R0	;новый адрес
+;;;;;;;	mov	A,R6		;<data>
+;;;;;;;	mov	@R0,A		;-> в буфер
+	mov	@r0,R6_08
+;;;;;;;	inc	R0
+;;;;;;;	cjne	R0,#buf_wr+len_bwr,no_ebwr
+;;;;;;;	mov	R0,#buf_wr	;в начало буфера
+;;;;;;;no_ebwr:
+;;;;;;;	mov	adr_ws,R0	;новый адрес
+	inc	adr_ws
+	anl	adr_ws,#$BF ;80..BF, then wrap	
 ex_cmd: jmp	L_33E		;выйти
 ;
 clr_bwr:
@@ -1282,32 +1295,40 @@ ser_int:
 ; в буфере есть еще байты для передачи
 	clr	EA		;запретить прерывания. TODO: нахера?
 	mov	R0,adr_wr	;адрес буфера передачи
-	mov	A,@R0		;текущий байт
-	mov	SBUF,A		; передать
-	inc	R0		;к следующему байту
-	cjne	R0,#buf_wr+len_bwr,no_ewr
-	mov	R0,#buf_wr	;начать с начала буфера
-no_ewr:
-	mov	adr_wr,R0	;новый адрес в буфере
+;;;;;;;	mov	A,@R0		;текущий байт
+;;;;;;;	mov	SBUF,A		; передать
+	mov	SBUF,@r0
+;;;;;;;	inc	R0		;к следующему байту
+;;;;;;;	cjne	R0,#buf_wr+len_bwr,no_ewr
+;;;;;;;	mov	R0,#buf_wr	;начать с начала буфера
+;;;;;;;no_ewr:
+;;;;;;;	mov	adr_wr,R0	;новый адрес в буфере
+	inc	adr_wr
+	anl	adr_wr,#$BF	;80..BF wrap
 	setb	EA		;разрешить прерывания TODO: нахера?
 	jmp	no2end_buf	;выход TODO: тут можно сразу поп-поп-рети
 ;------------------------------------------
 ; принят байт по RS232
 ser_rx:
 ; R5 = cnt_rd - счетчик приема
-	cjne	R5,#len_brd,no_end_buf ;еще не конец буфера
+;;;;;;;	cjne	R5,#len_brd,no_end_buf ;еще не конец буфера
+	cjne	R5,#len_brd,.no_end_buf ;еще не конец буфера
 ; иначе из начала буфера удалить старый символ
 	dec	R5		;cnt_rd-1
 	inc	R4		;указатель приема вперед
-	cjne	R4,#(buf_rd+len_brd)&255,no_end_buf
-	mov	R4,#buf_rd	;adr_rd в начало буфера
-no_end_buf:
-	mov	A,SBUF		;Байт приема
-	mov	@R1,A		;в буфер (R1 - адрес буфера приема)
+;;;;;;;	cjne	R4,#(buf_rd+len_brd)&255,no_end_buf
+;;;;;;;	mov	R4,#buf_rd	;adr_rd в начало буфера
+;;;;;;;no_end_buf:
+	orl	adr_rd,#$C0	;C0..FF wrap
+.no_end_buf
+;;;;;;;	mov	A,SBUF		;Байт приема
+;;;;;;;	mov	@R1,A		;в буфер (R1 - адрес буфера приема)
+	mov	@r1,SBUF
 	inc	R5		;cnt_rd+1
 	inc	R1		;указатель вперед
-	cjne	R1,#(buf_rd+len_brd)&255,no2end_buf
-	mov	R1,#buf_rd	;указатель приема в начало буфера
+;;;;;;;	cjne	R1,#(buf_rd+len_brd)&255,no2end_buf
+;;;;;;;	mov	R1,#buf_rd	;указатель приема в начало буфера
+	orl	adr_rs,#$C0	;C0..FF wrap
 no2end_buf:
 	pop	ACC
 	pop	PSW
