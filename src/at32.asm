@@ -58,6 +58,7 @@ len_bwr equ	64		;tx buf len -- DO NOT CHANGE!!!
 len_brd equ	64		;Длина буфера приема -- DO NOT CHANGE!!!
 len_ird	equ	len_brd-4	;длина буфера для INT (если разрешен)
 
+kbd_timeout	equ	7 ;in tmr0 overflow periods, must be ~60ms
 
 ;*************************************************
 ; Часы реального времени
@@ -66,6 +67,11 @@ f_tic	equ	50	;Частота тиков Ч.Р.В  (Гц)
 ; Коэфф.деления таймера 0 равен
 ;KF_T0	equ	-f_proc*1000/12/f_tic
 KF_T0	equ	0B800h	;11.0592 МГц
+
+quartz_clocks	equ	11059200
+tmr_period	equ	8192*12
+
+
 
 
 	segment	data
@@ -131,6 +137,9 @@ t_res:	ds 3		;адрес контрольной строки
 tics:		ds 1		;50 тиков в секунду
 b_time: 	ds 3		;секунды,минуты,часы
 b_date: 	ds 4		;день,месяц,год,столетие
+
+clocks_cnt:	ds	3	;quartz clocks counter
+
 
 
 
@@ -237,15 +246,20 @@ prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
 	mov	SCON, #50h	; Serial Port Control
 				;SM0,SM1 = 01;UART 8 бит
 				;REN=1 прием разрешен
-	mov	TMOD, #21h	;Timer1=mode2  8-бит
+;;;;;;;	mov	TMOD, #21h	;Timer1=mode2  8-бит
 				;Timer0=mode1 16-бит
+
+	mov	TMOD,#$20 ;tmr0 - 13bit freerunning mode, tmr1 - 8bit presetting mode
+
+
 ; Set Timer 0 (50 Герц)
-	call	set_T0		;
+;	call	set_T0		;
 ;;;;;;;	mov	TCON, #55h	;Timer0,1-On/INT0,1 -Impuls
 	mov	TCON, #15h	;Timer0-On/INT0,1 -Impulse
 
 	mov	T2CON,#$34	;tmr2 for baud rate generation
 
+	;TODO: this also clears 'ATM' string in memory???
 ; Init MEM; 00h -> RAM 02h..38h
 	mov	R0, #02h	;от 02h
 	mov	R1, #36h	; до 38h
@@ -390,7 +404,7 @@ L_104:	mov	A, R0_10	; R0 page 10 # 0?
 L_108:	mov	A, R1_10	; R1 page 10 = 0?
 	jz	L_108		; Wait begin resive
 ;\----
-	mov	rtc_to, #3	; R7 page 18=3
+	mov	rtc_to, #kbd_timeout	; R7 page 18
 ;//----
 L_10F:	mov	A, R0_10	; R0 page 10
 	jnz	L_11E		; yes code key
@@ -1346,13 +1360,48 @@ int_rtc:			;9 timint0
 	mov	PSW, #18h	;1 PAGE 11
 ; Счетчик тайм-аута клавиатуры
 	mov	A, R7		;1 rtc_to
-	jz	L_408		;2
+	jz	.already_zero	;2
 	dec	R7		;1 -1
-L_408:
+.already_zero
 ;--------------------------------
-	djnz	tics,L_45A	;2
-;
-	mov	tics, #f_tic	;50 тиков в секунду
+;;;;;;;	djnz	tics,L_45A	;2
+;;;;;;;	mov	tics, #f_tic	;50 тиков в секунду
+
+	;add timer0 period in clocks to clocks_cnt variable
+	mov	a,#tmr_period&255
+	add	a,clocks_cnt
+	mov	clocks_cnt,a
+
+	mov	a,#(tmr_period>>8)&255
+	addc	a,clocks_cnt+1
+	mov	clocks_cnt+1,a
+	
+	mov	a,#(tmr_period>>16)&255
+	addc	a,clocks_cnt+2	;now CY==0
+	mov	clocks_cnt+2,a
+
+
+	;compare and try to subtract number of clocks in 1 second from clocks_cnt
+	mov	a,clocks_cnt
+	subb	a,#quartz_clocks&255
+	mov	r3,a
+
+	mov	a,clocks_cnt+1
+	subb	a,#(quartz_clocks>>8)&255
+	mov	r2,a
+
+	mov	a,clocks_cnt+2
+	subb	a,#(quartz_clocks>>16)&255
+
+	jc	no_update_time	;CY=1 -- can't yet subtract, skip updating time
+
+	;managed to subtract -- update clocks_counter
+	mov	clocks_cnt,r3
+	mov	clocks_cnt+1,r2
+	mov	clocks_cnt+2,a
+
+	
+	;now update time
 	mov	R0, #b_time	;Буфер времени
 	inc	@R0
 	cjne	@R0, #60, L_45A ;<60 секунд
@@ -1411,7 +1460,10 @@ L_445:	clr	C
 ;
 	mov	@R0, #0
 ;
-L_45A:	call	set_T0		;T0 = 50 герц
+L_45A:	
+	;call	set_T0		;T0 = 50 герц
+
+no_update_time:
 	pop	ACC
 	pop	PSW
 	reti
@@ -1991,9 +2043,9 @@ at2xt:	db    0 ;00h
 ;===================================================
 ;;;;;;;	org	7B0h
 ; Установка параметров Таймера 0 (50 герц)
-set_T0: mov	TH0,#KF_T0/256 ;HIGH KF_T0 ; Timer0 - High Byte
-	mov	TL0,#KF_T0&255 ;LOW  KF_T0 ; Timer0 - Low Byte
-	ret
+;set_T0: mov	TH0,#KF_T0/256 ;HIGH KF_T0 ; Timer0 - High Byte
+;	mov	TL0,#KF_T0&255 ;LOW  KF_T0 ; Timer0 - Low Byte
+;	ret
 ;===================================================
 ;----------------------------------------------
 ;;;;;;;	org	7C0h
