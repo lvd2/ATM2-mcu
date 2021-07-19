@@ -103,11 +103,11 @@ adr_ws: ds 1		;текущий адрес для записи в буф.
 ;
 t_res:	ds 3		;адрес контрольной строки
 ;
-len_bwr equ	8
+len_bwr equ	64
 ;;;;;;;buf_wr: 	ds len_bwr	;буфер передачи
 ;
-len_brd equ	54-8		;Длина буфера приема
-len_ird	equ	50-8		;длина буфера для INT (если разрешен)
+len_brd equ	64		;Длина буфера приема
+len_ird	equ	len_brd-4	;длина буфера для INT (если разрешен)
 ;;;;;;;buf_rd: 	ds len_brd	;буфер приема
 		;ds 0
 ;--------------------------------
@@ -895,7 +895,7 @@ L_344:	cjne	R3, #02h, no_c02
 	mov	R0, adr_rd	;текущий адрес приема
 	mov	A,@R0		;байт из буфера
 	inc	R0
-	cjne	R0, #buf_rd+len_brd, no_e_brd
+	cjne	R0, #(buf_rd+len_brd)&255, no_e_brd
 ; дошли до конца буфера приема, вернутся в начало
 	mov	R0, #buf_rd	;
 no_e_brd:
@@ -1299,14 +1299,14 @@ ser_rx:
 ; иначе из начала буфера удалить старый символ
 	dec	R5		;cnt_rd-1
 	inc	R4		;указатель приема вперед
-	cjne	R4,#buf_rd+len_brd,no_end_buf
+	cjne	R4,#(buf_rd+len_brd)&255,no_end_buf
 	mov	R4,#buf_rd	;adr_rd в начало буфера
 no_end_buf:
 	mov	A,SBUF		;Байт приема
 	mov	@R1,A		;в буфер (R1 - адрес буфера приема)
 	inc	R5		;cnt_rd+1
 	inc	R1		;указатель вперед
-	cjne	R1,#buf_rd+len_brd,no2end_buf
+	cjne	R1,#(buf_rd+len_brd)&255,no2end_buf
 	mov	R1,#buf_rd	;указатель приема в начало буфера
 no2end_buf:
 	pop	ACC
