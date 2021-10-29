@@ -211,6 +211,7 @@ t_025	equ	115	;Ft=11.0592 Мгц
 ; Сброс компьютера
 reset:	clr	SP_RES		;RESET = 0
 	call	del_60ms	; длительность импульса
+	call	del_60ms	; длительность импульса
     setb	SP_RES		;RESET = 1
 ; Проверить буфер контрольной строки
 	mov	R0,#t_res	;начало буфера
@@ -234,6 +235,7 @@ c_del:	mov	R0,#t_025	;Константа для 250 мксек
 prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
 	mov	SP, #b_stek-1	;Указатель стека
 	mov	PSW,#00h
+	call	del_60ms	;Пауза 60 ms
 	call	del_60ms	;Пауза 60 ms
 	mov	R0,#t_res	;Буфер контр.строки
 	mov	@R0,#'A'
@@ -506,7 +508,7 @@ L_16E:	anl	A, #3		;d1,d0
 ;d3,d2=00
 	mov	A, R5
 	anl	A, #30h 	;d5,d4
-	jnz	L_1E4		;
+	jnz	CL_1E4		;
 ;d5,d4=00
 L_17F:	mov	A, R5
 	jb	ACC.6, L_19F	;*40h
@@ -516,11 +518,39 @@ L_17F:	mov	A, R5
 	mov	A, R3
 	orl	A, R4
 	anl	A, #6
-	cjne	A, #6, L_192	;bits Ctrl,Alt
-; Ctrl+Alt
-	cjne	R2, #2Eh, L_16D ;Нажата [./Del]?
-; + [./Del]
+
+	cjne	A,  #6, L_192	;bits Ctrl,Alt; Ctrl+Alt
+	cjne	R2, #37h, CL_17D ;Нажата [7/Home]?
+	
+	clr	SP_WT		;1 P1.7  W_ON=0 Разрешить прерывания
+	clr	A		;1
+	clr	f_press 	;1
+;	mov	R6_00, A	;1 R6 PAGE 00
+;	mov	R0_10, A	;1 R0 PAGE 10
+;	mov	R1_10, A	;1 R1 PAGE 10
+;	mov	R7, A		;1 флаг команды=0
+;	mov	R1, A		;1 Z код клавиатуры = 0
+	jmp	ex_kbd		;2
+
+	
+CL_17D:
+	cjne	A,  #6, L_192	;bits Ctrl,Alt; Ctrl+Alt
+	cjne	R2, #30h, CL_16D ;Нажата [0/Ins]?
+	
+	mov	A,   #0FFh		;1
+	mov	DPH, #01h		;1  DPTR=#01xx P2.0 = 1
+	movx	@DPTR, A	;2  /VWR=0 -> Сбросить /WAIT
+	setb	SP_WT		;1 P1.7  W_ON=1 Запрет прерываний
+
+CL_16D:
+	cjne	A, #6, L_192	;bits Ctrl,Alt; Ctrl+Alt
+
+	cjne	R2, #2Eh, L_16D ;Нажата [./Del]?; + [./Del]
 	jmp	reset		;Reset COMP
+	
+CL_1E4:	jmp	L_21A		;test 20,30	
+	
+	
 ;-------
 ; no Ctrl+Alt
 L_192:	cjne	R6, #1, L_1A2	;set D7
