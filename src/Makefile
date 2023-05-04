@@ -1,5 +1,5 @@
-TARGET = ../bin/at32.hex
-BIN = ../bin/at32.bin
+TARGET = ../bin/at_mcs52.hex
+BIN = ../bin/at_mcs52.bin
 
 
 .PHONY: clean
@@ -10,15 +10,15 @@ all: $(TARGET) $(BIN)
 
 bin: $(BIN)
 
-.PRECIOUS: at32.p
+.PRECIOUS: at_mcs52.p
 
-at32.p: *.asm
-	asl -L at32.asm
+at_mcs52.p: *.asm
+	asl -L at_mcs52.asm
 
-$(TARGET): at32.p
+$(TARGET): at_mcs52.p
 	p2hex -r '$$-$$' $< $@
 
-$(BIN): at32.p
+$(BIN): at_mcs52.p
 	p2bin -r '$$-$$' $< $@
 
 #pgm: $(TARGET)
