@@ -16,10 +16,10 @@ at_mcs52.p: *.asm
 	asl -L at_mcs52.asm
 
 $(TARGET): at_mcs52.p
-	p2hex -r '$$-$$' $< $@
+	p2hex   $< $@
 
 $(BIN): at_mcs52.p
-	p2bin -r '$$-$$' $< $@
+	p2bin   $< $@
 
 #pgm: $(TARGET)
 #	avrdude -c usbasp -p at89s52 -B 5 -U flash:w:$(TARGET):i
