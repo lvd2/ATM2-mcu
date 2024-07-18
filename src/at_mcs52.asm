@@ -1326,11 +1326,6 @@ set_speed:
 ;****************************************
 ; Прием по Rs232			*
 ;****************************************
-;serint:
-;	push	PSW
-;	push	ACC
-;	mov	PSW, #18h	;PAGE 18
-;	jmp	ser_int
 ser_int:
 	jbc	RI,ser_rx	;готовность приемника
 ; готовность передатчика RS232
@@ -1345,14 +1340,7 @@ ser_int:
 ; в буфере есть еще байты для передачи
 	clr	EA		;запретить прерывания. TODO: нахера?
 	mov	R0,adr_wr	;адрес буфера передачи
-;;;;;;;	mov	A,@R0		;текущий байт
-;;;;;;;	mov	SBUF,A		; передать
 	mov	SBUF,@r0
-;;;;;;;	inc	R0		;к следующему байту
-;;;;;;;	cjne	R0,#buf_wr+len_bwr,no_ewr
-;;;;;;;	mov	R0,#buf_wr	;начать с начала буфера
-;;;;;;;no_ewr:
-;;;;;;;	mov	adr_wr,R0	;новый адрес в буфере
 	inc	adr_wr
 	anl	adr_wr,#$BF	;80..BF wrap
 	setb	EA		;разрешить прерывания TODO: нахера?
@@ -1361,23 +1349,15 @@ ser_int:
 ; принят байт по RS232
 ser_rx:
 ; R5 = cnt_rd - счетчик приема
-;;;;;;;	cjne	R5,#len_brd,no_end_buf ;еще не конец буфера
 	cjne	R5,#len_brd,.no_end_buf ;еще не конец буфера
 ; иначе из начала буфера удалить старый символ
 	dec	R5		;cnt_rd-1
 	inc	R4		;указатель приема вперед
-;;;;;;;	cjne	R4,#(buf_rd+len_brd)&255,no_end_buf
-;;;;;;;	mov	R4,#buf_rd	;adr_rd в начало буфера
-;;;;;;;no_end_buf:
 	orl	adr_rd,#$C0	;C0..FF wrap
 .no_end_buf
-;;;;;;;	mov	A,SBUF		;Байт приема
-;;;;;;;	mov	@R1,A		;в буфер (R1 - адрес буфера приема)
 	mov	@r1,SBUF
 	inc	R5		;cnt_rd+1
 	inc	R1		;указатель вперед
-;;;;;;;	cjne	R1,#(buf_rd+len_brd)&255,no2end_buf
-;;;;;;;	mov	R1,#buf_rd	;указатель приема в начало буфера
 	orl	adr_rs,#$C0	;C0..FF wrap
 no2end_buf:
 	pop	ACC
