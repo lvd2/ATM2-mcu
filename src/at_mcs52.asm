@@ -192,12 +192,50 @@ extint1:		;2
 ; Timer interrupt 1
 timint1:reti
 ; ========================================
+
 	ORG	023h
 ; Serial port interrupt (SERIAL)
 serint: push	PSW
 	push	ACC
 	mov	PSW,#18h	;PAGE 18
-	jmp	ser_int ;<<< can be removed (handler might be right here)
+	jbc	RI,ser_rx	;готовность приемника
+; готовность передатчика RS232
+	clr	TI		;сброс готовности ПРД.
+; если в буфере передатчика есть данные - передать
+	mov	A,R6		;cnt_wr ? (сч.прд)
+	jz	.no2end_buf	;ничего нет
+; передать байт из буфера передатчика
+	dec	R6		;счетчик - 1
+	mov	A,R6		; если cnt_wr=1
+	jz	.no2end_buf	;это признак передачи байта
+; в буфере есть еще байты для передачи
+	clr	EA		;запретить прерывания. TODO: нахера?
+	mov	R0,adr_wr	;адрес буфера передачи
+	mov	SBUF,@r0
+	inc	adr_wr
+	anl	adr_wr,#$BF	;80..BF wrap
+	setb	EA		;разрешить прерывания TODO: нахера?
+.no2end_buf
+	pop	ACC
+	pop	PSW
+	reti
+;------------------------------------------
+; принят байт по RS232
+ser_rx:
+; R5 = cnt_rd - счетчик приема
+	cjne	R5,#len_brd,.no_end_buf ;еще не конец буфера
+; иначе из начала буфера удалить старый символ
+	dec	R5		;cnt_rd-1
+	inc	R4		;указатель приема вперед
+	orl	adr_rd,#$C0	;C0..FF wrap
+.no_end_buf
+	mov	@r1,SBUF
+	inc	R5		;cnt_rd+1
+	inc	R1		;указатель вперед
+	orl	adr_rs,#$C0	;C0..FF wrap
+	pop	ACC
+	pop	PSW
+	reti
 ; ========================================
 ;;;;;;;	ORG	02Ch
 ; Ver 4.1xx
@@ -1323,46 +1361,6 @@ set_speed:
 
 
 
-;****************************************
-; Прием по Rs232			*
-;****************************************
-ser_int:
-	jbc	RI,ser_rx	;готовность приемника
-; готовность передатчика RS232
-	clr	TI		;сброс готовности ПРД.
-; если в буфере передатчика есть данные - передать
-	mov	A,R6		;cnt_wr ? (сч.прд)
-	jz	no2end_buf	;ничего нет
-; передать байт из буфера передатчика
-	dec	R6		;счетчик - 1
-	mov	A,R6		; если cnt_wr=1
-	jz	no2end_buf	;это признак передачи байта
-; в буфере есть еще байты для передачи
-	clr	EA		;запретить прерывания. TODO: нахера?
-	mov	R0,adr_wr	;адрес буфера передачи
-	mov	SBUF,@r0
-	inc	adr_wr
-	anl	adr_wr,#$BF	;80..BF wrap
-	setb	EA		;разрешить прерывания TODO: нахера?
-	jmp	no2end_buf	;выход TODO: тут можно сразу поп-поп-рети
-;------------------------------------------
-; принят байт по RS232
-ser_rx:
-; R5 = cnt_rd - счетчик приема
-	cjne	R5,#len_brd,.no_end_buf ;еще не конец буфера
-; иначе из начала буфера удалить старый символ
-	dec	R5		;cnt_rd-1
-	inc	R4		;указатель приема вперед
-	orl	adr_rd,#$C0	;C0..FF wrap
-.no_end_buf
-	mov	@r1,SBUF
-	inc	R5		;cnt_rd+1
-	inc	R1		;указатель вперед
-	orl	adr_rs,#$C0	;C0..FF wrap
-no2end_buf:
-	pop	ACC
-	pop	PSW
-	reti
 ;****************************************
 ; Timer 0 (часы реального времени)	*
 ;****************************************
