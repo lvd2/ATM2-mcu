@@ -62,11 +62,6 @@ kbd_timeout	equ	7 ;in tmr0 overflow periods, must be ~60ms
 
 ;*************************************************
 ; Часы реального времени
-f_tic	equ	50	;Частота тиков Ч.Р.В  (Гц)
-;f_proc	equ	7000	;Частота тактирования (КГц)
-; Коэфф.деления таймера 0 равен
-;KF_T0	equ	-f_proc*1000/12/f_tic
-KF_T0	equ	0B800h	;11.0592 МГц
 
 quartz_clocks	equ	11059200
 tmr_period	equ	8192*12
@@ -134,7 +129,6 @@ t_res:	ds 3		;адрес контрольной строки
 ;
 ;--------------------------------
 ; Буфер часов
-;;;;;;;;;;;;;;;;tics:		ds 1		;50 тиков в секунду
 b_time: 	ds 3		;секунды,минуты,часы
 b_date: 	ds 4		;день,месяц,год,столетие
 
@@ -211,7 +205,7 @@ ser_tx:
 	jz	.no2end_buf	;это признак передачи байта
 ; в буфере есть еще байты для передачи
 	mov	R0,adr_wr	;адрес буфера передачи
-	mov	SBUF,@r0
+	mov	SBUF,@r0 ;THIS DAMAGES r0 value from timer0 time update!
 	inc	adr_wr
 	anl	adr_wr,#$BF	;80..BF wrap
 .no2end_buf
@@ -241,7 +235,6 @@ ser_rx:
 	reti		;2c
 	;total 22c no overflow/24c overflow for serial RX irq out of max 80c for 115200/8n1
 ; ========================================
-;;;;;;;	ORG	02Ch
 ; Ver 4.1xx
 VERS:	db	4,1		;3.2
 	db	1,1	;Тактовая Частота в МГц
@@ -290,15 +283,12 @@ prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
 	mov	SCON, #50h	; Serial Port Control
 				;SM0,SM1 = 01;UART 8 бит
 				;REN=1 прием разрешен
-;;;;;;;	mov	TMOD, #21h	;Timer1=mode2  8-бит
-				;Timer0=mode1 16-бит
 
 	mov	TMOD,#$20 ;tmr0 - 13bit freerunning mode, tmr1 - 8bit presetting mode
 
 
 ; Set Timer 0 (50 Герц)
 ;	call	set_T0		;
-;;;;;;;	mov	TCON, #55h	;Timer0,1-On/INT0,1 -Impuls
 	mov	TCON, #15h	;Timer0-On/INT0,1 -Impulse
 
 	mov	T2CON,#$34	;tmr2 for baud rate generation
@@ -993,12 +983,7 @@ L_344:	cjne	R3, #02h, no_c02
 	mov	cnt_rd, A	;счетчик - 1
 	mov	R0, adr_rd	;текущий адрес приема
 	mov	A,@R0		;байт из буфера
-;;;;;;;	inc	R0
-;;;;;;;	cjne	R0, #(buf_rd+len_brd)&255, no_e_brd
 ; дошли до конца буфера приема, вернутся в начало
-;;;;;;;	mov	R0, #buf_rd	;
-;;;;;;;no_e_brd:
-;;;;;;;	mov	adr_rd, R0	;Новый адрес в буфере
 	inc	adr_rd
 	orl	adr_rd,#$C0	;C0..FF wrap
 
@@ -1084,14 +1069,7 @@ no_1c03:
 no_inc:
 ; записать текущий байт в буфер передатчика
 	mov	R0,adr_ws	;текущий адрес записи
-;;;;;;;	mov	A,R6		;<data>
-;;;;;;;	mov	@R0,A		;-> в буфер
 	mov	@r0,R6_08
-;;;;;;;	inc	R0
-;;;;;;;	cjne	R0,#buf_wr+len_bwr,no_ebwr
-;;;;;;;	mov	R0,#buf_wr	;в начало буфера
-;;;;;;;no_ebwr:
-;;;;;;;	mov	adr_ws,R0	;новый адрес
 	inc	adr_ws
 	anl	adr_ws,#$BF ;80..BF, then wrap	
 ex_cmd: jmp	L_33E		;выйти
@@ -1375,9 +1353,6 @@ int_rtc:			;9 timint0
 	jz	.already_zero	;2
 	dec	R7		;1 -1
 .already_zero
-;--------------------------------
-;;;;;;;	djnz	tics,L_45A	;2
-;;;;;;;	mov	tics, #f_tic	;50 тиков в секунду
 
 	;add timer0 period in clocks to clocks_cnt variable
 	mov	a,#tmr_period&255
@@ -1481,7 +1456,6 @@ no_update_time:
 	reti
 ; -------------------------
 ;
-;;;;;;;	ORG	600h
 ;----------------------------------------
 ; Число дней в месяцах
 L_465:	db  31	;Январь
@@ -2052,14 +2026,7 @@ at2xt:	db    0 ;00h
 	db    0 ;81h
 	db    0 ;82h
 	db  41h ;83h  118    F7
-;===================================================
-;;;;;;;	org	7B0h
-; Установка параметров Таймера 0 (50 герц)
-;set_T0: mov	TH0,#KF_T0/256 ;HIGH KF_T0 ; Timer0 - High Byte
-;	mov	TL0,#KF_T0&255 ;LOW  KF_T0 ; Timer0 - Low Byte
-;	ret
-;===================================================
-;----------------------------------------------
+
 ;;;;;;;	org	7C0h
 aCopyright:
 	db "(c) 1995 Honey Soft, "
