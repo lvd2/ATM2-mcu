@@ -193,12 +193,13 @@ extint1:		;2
 timint1:reti
 ; ========================================
 
-	ORG	023h
+	ORG	023h	;4c already spent (irq entry latency when no mul/div)
 ; Serial port interrupt (SERIAL)
-serint: push	PSW
-	push	ACC
-	mov	PSW,#18h	;PAGE 18
-	jbc	RI,ser_rx	;готовность приемника
+serint: push	PSW	;2c
+	mov	PSW,#18h	;2c
+	jbc	RI,ser_rx	;2c готовность приемника
+ser_tx:
+	push	ACC	;2c
 ; готовность передатчика RS232
 	clr	TI		;сброс готовности ПРД.
 ; если в буфере передатчика есть данные - передать
@@ -209,12 +210,10 @@ serint: push	PSW
 	mov	A,R6		; если cnt_wr=1
 	jz	.no2end_buf	;это признак передачи байта
 ; в буфере есть еще байты для передачи
-	clr	EA		;запретить прерывания. TODO: нахера?
 	mov	R0,adr_wr	;адрес буфера передачи
 	mov	SBUF,@r0
 	inc	adr_wr
 	anl	adr_wr,#$BF	;80..BF wrap
-	setb	EA		;разрешить прерывания TODO: нахера?
 .no2end_buf
 	pop	ACC
 	pop	PSW
@@ -223,19 +222,24 @@ serint: push	PSW
 ; принят байт по RS232
 ser_rx:
 ; R5 = cnt_rd - счетчик приема
-	cjne	R5,#len_brd,.no_end_buf ;еще не конец буфера
+	cjne	R5,#len_brd,.no_end_buf ; 2c еще не конец буфера
 ; иначе из начала буфера удалить старый символ
-	dec	R5		;cnt_rd-1
-	inc	R4		;указатель приема вперед
-	orl	adr_rd,#$C0	;C0..FF wrap
+	;r5 untouched
+	inc	R4		;1c указатель приема вперед
+	orl	adr_rd,#$C0	;2c C0..FF wrap
+	mov	@r1,SBUF	;2c
+	inc	R1		;1c указатель вперед
+	orl	adr_rs,#$C0	;2c C0..FF wrap
+	pop	PSW	;2c
+	reti		;2c
 .no_end_buf
-	mov	@r1,SBUF
-	inc	R5		;cnt_rd+1
-	inc	R1		;указатель вперед
-	orl	adr_rs,#$C0	;C0..FF wrap
-	pop	ACC
-	pop	PSW
-	reti
+	mov	@r1,SBUF	;2c
+	inc	R5		;1c cnt_rd+1
+	inc	R1		;1c указатель вперед
+	orl	adr_rs,#$C0	;2c C0..FF wrap
+	pop	PSW	;2c
+	reti		;2c
+	;total 22c no overflow/24c overflow for serial RX irq out of max 80c for 115200/8n1
 ; ========================================
 ;;;;;;;	ORG	02Ch
 ; Ver 4.1xx
