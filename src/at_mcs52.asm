@@ -161,9 +161,14 @@ start:	jmp	prog	;-> запуск программы
 	ORG	003h
 ; External interrupt 0 ~\_ (тактовая клавиатуры)
 extint0:
-	push	PSW
-	push	ACC
-	jmp	L_23C	; int /CLK_K
+;	push	PSW
+;	push	ACC
+;	jmp	L_23C	; int /CLK_K
+
+	clr	KB_CLK
+	setb	TF1
+	reti
+
 ; ========================================
 	ORG	00Bh
 ; Timer interrupt 0 (Часы реального времени)
@@ -183,8 +188,11 @@ extint1:		;2
 	;^^^ only AJMP here
 ; ========================================
 	ORG	01Bh
-; Timer interrupt 1
-timint1:reti
+; Timer interrupt 1 -- used as postponed AT clock interrupt
+timint1:
+	push	PSW
+	push	ACC
+	jmp	L_23C	; int /CLK_K
 ; ========================================
 
 	ORG	023h	;4c already spent (irq entry latency when no mul/div)
@@ -268,6 +276,7 @@ c_del:	mov	R0,#t_025	;Константа для 250 мксек
 ;*********************************************
 ; Вход по включению питания
 prog:	mov	P1, #0FFh	;/RESET=1;W_ON=1
+	mov	P3, #0FFh
 	mov	SP, #b_stek-1	;Указатель стека
 	mov	PSW,#00h
 	call	del_60ms	;Пауза 60 ms
@@ -307,7 +316,7 @@ c_clr:	mov	@R0, A		; обнулить
 	call	set_speed
 ;
 	mov	IP,#01h		; Interrupt Priority
-	mov	IE,#97h		; Interrupt Enable INT0,1,T0,USART
+	mov	IE,#9Fh		; Interrupt Enable INT0,1,T0,T1,USART
 	mov	P1,#7Fh		; P1.7 -> Разрешить /WAIT (W_ON=0)
 ;/======================================================
 c0main:	call	clr_buf 	; Clear buf KBD
@@ -741,6 +750,7 @@ L_23C:			; int0
 ;-----
 	pop	ACC
 	pop	PSW
+	setb	KB_CLK
 	reti
 ;-----
 ; Принят стартовый бит данных
@@ -756,6 +766,7 @@ L_25B:	mov	A, R5
 L_260:	inc	R1
 L_261:	pop	ACC
 	pop	PSW
+	setb	KB_CLK
 	reti
 ;-----
 ; Прием бита паритета
